@@ -188,8 +188,16 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                     _pkgInfo.Signature = new string(br.ReadChars(8));
 
                     if (!_pkgInfo.Signature.StartsWith("PKGV")) //Check its PKG file?
-                        throw new PkgConverterException(new InvalidDataException($"Signature: '{_pkgInfo.Signature}'"), Error.INVALID_PKG_FILE_SIGNATURE);
-                    //else if (_pkgInfo.Signature == "PKGV0001") //Default version 1
+                        throw new PkgConverterException(new InvalidDataException(_pkgInfo.Signature), Error.INVALID_PKG_FILE_SIGNATURE);
+                    else if ((_pkgInfo.Signature != "PKGV0001") && (_pkgInfo.Signature != "PKGV0002")) //It supported versino?
+                    {
+                        var savedColor = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"PkgVersion: {_pkgInfo.Signature} - not supported!");
+                        Console.ForegroundColor = savedColor;
+                    }
+                    else
+                        Console.WriteLine($"PkgVersion: {_pkgInfo.Signature}");
 
                     //Читаем кол. файлов в пакете
                     _pkgInfo.FilesCount = br.ReadInt32();
@@ -197,7 +205,8 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                     //Сквозь все файлы в пакете
                     for (int i = 0; i < _pkgInfo.FilesCount; i++)
                     {
-                        string path = new string(br.ReadChars(br.ReadInt32()));
+                        int pathLength = br.ReadInt32();
+                        string path = new string(br.ReadChars(pathLength));
                         int offset = br.ReadInt32();
                         int lenght = br.ReadInt32();
 
@@ -299,7 +308,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
 
         public void SetSignatureToZip()
         {
-            string pkgVersion = $"             ┌──────────────────────┐\n             │ PkgVersion: {_pkgInfo.Signature} │\n             ╘══════════════════════╛";
+            string pkgVersion = $"                  ┌──────────────────────┐\n                  │ PkgVersion: {_pkgInfo.Signature} │\n                  ╘══════════════════════╛";
             _zipArchive.SetComment($"{Program.ZipComment}\n{pkgVersion}", Encoding.UTF8);
         }
 
@@ -462,6 +471,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
 
         public enum Error
         {
+            NONE,
             UNHANDLED_EXCEPTION,
 
             INVALID_PKG_FILE_SIGNATURE,

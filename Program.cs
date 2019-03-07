@@ -1,13 +1,15 @@
 ﻿using System;
+using System.IO;
+using System.IO.Compression;
+using System.Text;
 
 namespace Wallpaper_Engine_Pkg_To_Zip
 {
     class Program
     {
-        public static string Version = "v2.0";
-        public static string Greetings = $"\n┌──────────────────────────────────────────┬──────┐\n│   Wallpaper Engine Pkg to Zip and back   │ {Version} │\n├──────────────────────────────────────────┴──────┤\n│             Supported pkg versions:             │\n│                   \"PKGV0001\"                    │\n├─────────────────────────────────────────────────┤\n│                 by TheRioMiner                  │\n╘═════════════════════════════════════════════════╛\n";
-        //public static string Greetingsv21 = $"\n┌──────────────────────────────────────────┬──────┐\n│   Wallpaper Engine Pkg to Zip and back   │ {Version} │\n├──────────────────────────────────────────┴──────┤\n│             Supported pkg versions:             │\n│             \"PKGV0001\", \"PKGV0002\"              │\n├─────────────────────────────────────────────────┤\n│                 by TheRioMiner                  │\n╘═════════════════════════════════════════════════╛\n";
-        public static string ZipComment = $"┌─────────────────────────────────────────────────┐\n│        This zip was created by program:         │\n├──────────────────────────────────────────┬──────┤\n│   Wallpaper Engine Pkg to Zip and back   │ {Version} │\n├──────────────────────────────────────────┴──────┤\n│                 by TheRioMiner                  │\n╘═════════════════════════════════════════════════╛\n";
+        public static string Version = "v2.1";
+        public static readonly string Greetings = $"\n┌────────────────────────────────────────────────────────────┐\n│      ┌──────────────────────────────────────────────┐      │\n│     ▐│ Wallpaper Engine Pkg to Zip and back  [{Version}] │▌     │\n│     █┴──────────────────────────────────────────────┴█     │\n╞════════════════════════════════════════════════════════════╡\n│ https://github.com/TheRioMiner/Wallpaper-Engine-Pkg-to-Zip │\n├────────────────────────────────────────────────────────────┤\n│                   Supported pkg versions:                  │\n│                   \"PKGV0001\", \"PKGV0002\"                   │\n╘════════════════════════════════════════════════════════════╛\n";
+        public static readonly string ZipComment = $"┌────────────────────────────────────────────────────────────┐\n│              This zip was created in program:              │ \n├────────────────────────────────────────────────────────────┤\n│         Wallpaper Engine Pkg to Zip and back  [{Version}]       │\n├────────────────────────────────────────────────────────────┤\n│ https://github.com/TheRioMiner/Wallpaper-Engine-Pkg-to-Zip │\n╘════════════════════════════════════════════════════════════╛\n";
 
         static void Main(string[] args)
         {
@@ -33,6 +35,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                 else
                 {
                     ShowUsage(); //Invalid mode putted, show how usage program
+                    Console.ForegroundColor = ConsoleColor.Gray;
                     return;
                 }
 
@@ -82,7 +85,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                             Console.WriteLine($"Pkg file: '{pkg}' corrupted or unhandled error! - Message:[{ex.SrcMsg}]");
                             break;
                         case PkgConverter.Error.INVALID_PKG_FILE_SIGNATURE:
-                            Console.WriteLine($"Unknown pkg version - {ex.SrcMsg}");
+                            Console.WriteLine($"Unknown pkg signature - [{ex.SrcMsg}]");
                             break;
                         case PkgConverter.Error.FAILED_SEEKING_PKG_FILE:
                             Console.WriteLine($"Failed seeking in pkg file - [{ex.SrcMsg}]");
@@ -101,7 +104,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                             break;
                     }
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.ReadLine();
+                    Environment.ExitCode = (int)ex.Error;
                     return;
                 }
             }

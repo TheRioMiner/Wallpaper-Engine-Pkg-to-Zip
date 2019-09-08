@@ -82,7 +82,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
         {
             //Detecting original version of file
             _pkgInfo.Signature = DetectSignatureFromZip(); 
-            if (_pkgInfo.Signature == "")
+            if (string.IsNullOrEmpty(_pkgInfo.Signature))
             {
                 _pkgInfo.Signature = "PKGV0001";
                 Console.WriteLine($"PkgVersion: not detected, will be used \"PKGV0001\"");
@@ -95,9 +95,9 @@ namespace Wallpaper_Engine_Pkg_To_Zip
             _pkgInfo.FilesCount = _zipArchive.Entries.Count;
 
             //Precompute offset of start file in pkg
-            _pkgInfo.Offset += 4 + _pkgInfo.Signature.Length + 4; //signatureStringLenght + "signatureString" + filesCountInt
+            _pkgInfo.Offset += 4 + Encoding.UTF8.GetByteCount(_pkgInfo.Signature)/*8*/ + 4; //signatureStringLenght + "signatureString" + filesCountInt
             foreach (var entry in _zipArchive.Entries)
-                _pkgInfo.Offset += (4 + entry.FullName.Length + 4 + 4); //pathStringLenght + "pathString" + offsetInt + lenghtInt
+                _pkgInfo.Offset += (4 + Encoding.UTF8.GetByteCount(entry.FullName) + 4 + 4); //pathStringLenght + "pathString" + offsetInt + lenghtInt
 
             //Generate tree of files
             int filesOffset = 0;
@@ -112,52 +112,59 @@ namespace Wallpaper_Engine_Pkg_To_Zip
         private void ZipToPkg()
         {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
-            using (var pkgBinaryWriter = new BinaryWriter(_pkgFileStream))
+            using (var bw = new BinaryWriter(_pkgFileStream, Encoding.UTF8, true))
             {
-                //Сообщаем об прогрессе
                 Console.WriteLine($"Writing main signature and files count...");
 
-                pkgBinaryWriter.Write(_pkgInfo.Signature.Length); //Длина строки сигнатуры (наверное)
-                pkgBinaryWriter.Write(_pkgInfo.Signature.ToCharArray()); //Сигнатура файла (!Обязательно как массив символов!)
+                //Write signature
+                byte[] signatureStringBytes = Encoding.UTF8.GetBytes(_pkgInfo.Signature);
+                bw.Write(signatureStringBytes.Length); //Length of signature string in bytes (always is 8)
+                bw.Write(signatureStringBytes); //Pkg signature
 
-                //Записываем кол. файлов в архиве
-                pkgBinaryWriter.Write(_pkgInfo.FilesCount);
+                //Write file count in
+                bw.Write(_pkgInfo.FilesCount);
 
                 Console.WriteLine($"Writing files tree...");
 
                 //Create tree of files
                 foreach (var file in _pkgInfo.Files)
                 {
-                    //Записываем длину строки пути файла и саму строку
-                    pkgBinaryWriter.Write(file.Path.Length);
-                    pkgBinaryWriter.Write(file.Path.ToCharArray()); //(!Обязательно как массив символов!)
+                    //Convert string to bytes
+                    byte[] filePathBytes = Encoding.UTF8.GetBytes(file.Path);
 
-                    //Записываем оффсет этого файла в пакете
-                    pkgBinaryWriter.Write(file.Offset);
+                    //Write string length and th string itself
+                    bw.Write(filePathBytes.Length);
+                    bw.Write(filePathBytes);
 
-                    //Записываем длину файла
-                    pkgBinaryWriter.Write(file.Lenght);
+                    //Write offset of this file in the package
+                    bw.Write(file.Offset);
+
+                    //Write length of file
+                    bw.Write(file.Lenght);
                 }
 
                 Console.WriteLine($"Starting writing files data to pkg...\n");
                 Console.ForegroundColor = ConsoleColor.DarkGreen;
 
-                //Наконец все файлы впихываем
+                //Finally, write file data
                 int filesPacked = 0;
                 foreach (var entry in _zipArchive.Entries)
                 {
+                    //Open file entry in zip archive
                     using (var stream = Stream.Synchronized(entry.Open()))
                     {
+                        //Unpack file from zip archive
                         byte[] readedBytes = new byte[entry.Length];
                         int readedCount = stream.Read(readedBytes, 0, readedBytes.Length);
 
                         if (readedCount != readedBytes.Length) //Кидаемься молотком, если вдруг насокячили с чтением
                             throw new PkgConverterException(new ArgumentOutOfRangeException($"File lenght: {readedBytes.Length}, but readed: {readedCount}"), Error.READED_LENGHT_NOT_EQUALS_NEED_LENGHT);
 
-                        //Пихуем файл в пакет
-                        pkgBinaryWriter.Write(readedBytes, 0, readedCount);
+                        //Write file data into pkg
+                        bw.Write(readedBytes, 0, readedCount);
                     }
 
+                    //Log in console
                     filesPacked++;
                     Console.WriteLine($"{filesPacked}:> {entry.FullName}");
                 }
@@ -168,54 +175,40 @@ namespace Wallpaper_Engine_Pkg_To_Zip
 
         private void ReadPkgInfo()
         {
-            using (var ms = new MemoryStream())
+            using (var br = new BinaryReader(_pkgFileStream, Encoding.UTF8, true))
             {
-                //Copy pkg stream to memory stream
-                try
+                //Read pkg file signature
+                int signatureLength = br.ReadInt32();
+                _pkgInfo.Signature = Encoding.UTF8.GetString(br.ReadBytes(signatureLength));
+
+                if (!_pkgInfo.Signature.StartsWith("PKGV")) //Check its PKG file?
+                    throw new PkgConverterException(new InvalidDataException(_pkgInfo.Signature), Error.INVALID_PKG_FILE_SIGNATURE);
+                else if ((_pkgInfo.Signature != "PKGV0001") && (_pkgInfo.Signature != "PKGV0002")) //It supported version?
                 {
-                    _pkgFileStream.CopyTo(ms);
-                    ms.Seek(0, SeekOrigin.Begin);
+                    var savedColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"PkgVersion: {_pkgInfo.Signature} - not supported!");
+                    Console.ForegroundColor = savedColor;
                 }
-                catch (Exception ex)
+                else
+                    Console.WriteLine($"PkgVersion: {_pkgInfo.Signature}");
+
+                //Read a file count in package
+                _pkgInfo.FilesCount = br.ReadInt32();
+
+                //Through all the files in the package
+                for (int i = 0; i < _pkgInfo.FilesCount; i++)
                 {
-                    throw new PkgConverterException(ex, Error.STREAM_COPYTO_EXCEPTION);
+                    int pathLength = br.ReadInt32();
+                    string path = Encoding.UTF8.GetString(br.ReadBytes(pathLength));
+                    int offset = br.ReadInt32();
+                    int lenght = br.ReadInt32();
+
+                    _pkgInfo.Files.Add(new PkgInfo.FileInfo() { Path = path, Offset = offset, Lenght = lenght });
                 }
 
-                using (var br = new BinaryReader(ms))
-                {
-                    //Читаем сигнатуру файла
-                    int maybeSignatureLenght = br.ReadInt32();
-                    _pkgInfo.Signature = new string(br.ReadChars(8));
-
-                    if (!_pkgInfo.Signature.StartsWith("PKGV")) //Check its PKG file?
-                        throw new PkgConverterException(new InvalidDataException(_pkgInfo.Signature), Error.INVALID_PKG_FILE_SIGNATURE);
-                    else if ((_pkgInfo.Signature != "PKGV0001") && (_pkgInfo.Signature != "PKGV0002")) //It supported versino?
-                    {
-                        var savedColor = Console.ForegroundColor;
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine($"PkgVersion: {_pkgInfo.Signature} - not supported!");
-                        Console.ForegroundColor = savedColor;
-                    }
-                    else
-                        Console.WriteLine($"PkgVersion: {_pkgInfo.Signature}");
-
-                    //Читаем кол. файлов в пакете
-                    _pkgInfo.FilesCount = br.ReadInt32();
-
-                    //Сквозь все файлы в пакете
-                    for (int i = 0; i < _pkgInfo.FilesCount; i++)
-                    {
-                        int pathLength = br.ReadInt32();
-                        string path = new string(br.ReadChars(pathLength));
-                        int offset = br.ReadInt32();
-                        int lenght = br.ReadInt32();
-
-                        _pkgInfo.Files.Add(new PkgInfo.FileInfo() { Path = path, Offset = offset, Lenght = lenght });
-                    }
-
-                    //Получаем начало содержимого файлов
-                    _pkgInfo.Offset = (int)(br.BaseStream.Position);
-                }
+                //We get the beginning of the contents of the files
+                _pkgInfo.Offset = (int)(br.BaseStream.Position);
             }
         }
 
@@ -229,11 +222,11 @@ namespace Wallpaper_Engine_Pkg_To_Zip
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             foreach (var file in _pkgInfo.Files)
             {
-                //Создаем новое вхождение в архиве с нужным названием
+                //Create a new entry in the archive with the desired name
                 var fileEntry = _zipArchive.CreateEntry(file.Path, CompressionLevel.NoCompression);
                 using (Stream writer = Stream.Synchronized(fileEntry.Open()))
                 {
-                    //Переходим в нужную позицию в пакете
+                    //Go to the desired position in the package
                     try
                     {
                         _pkgFileStream.Seek(_pkgInfo.Offset + file.Offset, SeekOrigin.Begin);
@@ -244,7 +237,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                     }
 
 
-                    //Читаем
+                    //Read...
                     byte[] binBytes = new byte[file.Lenght];
                     int readedCount = 0;
                     try
@@ -261,19 +254,18 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                         throw new PkgConverterException(new ArgumentOutOfRangeException($"File lenght: {file.Lenght}, but readed: {readedCount}"), Error.READED_LENGHT_NOT_EQUALS_NEED_LENGHT);
 
 
-                    //Записываем в архив
+                    //Write into zip archive!
                     try
                     {
                         writer.Write(binBytes, 0, readedCount);
                         writer.Flush();
                     }
-                    catch (Exception ex)
-                    {
+                    catch (Exception ex)  {
                         throw new PkgConverterException(ex, Error.FAILED_WRITING_INTO_ZIP_FILE);
                     }
                 }
 
-                //Успешно перепаковали
+                //Log into console
                 filesPacked++;
                 Console.WriteLine($"{filesPacked}:> {file.Path}");
             }
@@ -339,7 +331,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                 }
 
 
-                //Пишем сколько файлов в архиве и начинаем упаковку в zip архив
+                //We write how many files are in the archive and begin packing in the zip archive (.zip)
                 Console.WriteLine($"Files in pkg: {_pkgInfo.FilesCount}");
                 Console.WriteLine($"Starting repacking to zip: {Path.GetFileName(_zipFileStream.Name)}\n");
 
@@ -387,7 +379,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                 }
 
 
-                //Пишем сколько файлов в архиве и начинаем упаковку в пакет
+                //We write how many files are in the archive and begin packing into a .pkg
                 Console.WriteLine($"Files in zip: {_pkgInfo.FilesCount}");
                 Console.WriteLine($"Starting repacking to pkg: \"{_pkgInfo.FilePath}\"\n");
 
@@ -439,7 +431,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
             {
                 if (disposing)
                 {
-                    //Освобождаем ресурсы
+                    //Release a resources
                     _zipArchive.Dispose();
                     _zipFileStream.Dispose();
                     _pkgFileStream.Dispose();
@@ -487,7 +479,6 @@ namespace Wallpaper_Engine_Pkg_To_Zip
             READED_LENGHT_NOT_EQUALS_NEED_LENGHT,
             FAILED_SEEKING_PKG_FILE,
             FAILED_READING_PKG_FILE,
-            STREAM_COPYTO_EXCEPTION,
 
             ALREADY_CONVERTED,
         }

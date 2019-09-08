@@ -1,13 +1,10 @@
 ﻿using System;
-using System.IO;
-using System.IO.Compression;
-using System.Text;
 
 namespace Wallpaper_Engine_Pkg_To_Zip
 {
     class Program
     {
-        public static string Version = "v2.1";
+        public static string Version = "v2.2";
         public static readonly string Greetings = $"\n┌────────────────────────────────────────────────────────────┐\n│      ┌──────────────────────────────────────────────┐      │\n│     ▐│ Wallpaper Engine Pkg to Zip and back  [{Version}] │▌     │\n│     █┴──────────────────────────────────────────────┴█     │\n╞════════════════════════════════════════════════════════════╡\n│ https://github.com/TheRioMiner/Wallpaper-Engine-Pkg-to-Zip │\n├────────────────────────────────────────────────────────────┤\n│                   Supported pkg versions:                  │\n│                   \"PKGV0001\", \"PKGV0002\"                   │\n╘════════════════════════════════════════════════════════════╛\n";
         public static readonly string ZipComment = $"┌────────────────────────────────────────────────────────────┐\n│              This zip was created in program:              │ \n├────────────────────────────────────────────────────────────┤\n│         Wallpaper Engine Pkg to Zip and back  [{Version}]       │\n├────────────────────────────────────────────────────────────┤\n│ https://github.com/TheRioMiner/Wallpaper-Engine-Pkg-to-Zip │\n╘════════════════════════════════════════════════════════════╛\n";
 
@@ -17,7 +14,7 @@ namespace Wallpaper_Engine_Pkg_To_Zip
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine(Greetings);
             Console.ForegroundColor = ConsoleColor.Gray;
-
+            
             //Нам пихнули нормальные аргументы?
             if (args.Length >= 3)
             {
@@ -98,9 +95,6 @@ namespace Wallpaper_Engine_Pkg_To_Zip
                             break;
                         case PkgConverter.Error.FAILED_WRITING_INTO_ZIP_FILE:
                             Console.WriteLine($"Failed writing into zip file! - Message:[{ex.SrcMsg}]");
-                            break;
-                        case PkgConverter.Error.STREAM_COPYTO_EXCEPTION:
-                            Console.WriteLine($"Failed copying stream to another stream! - Message:[{ex.SrcMsg}]");
                             break;
                     }
                     Console.ForegroundColor = ConsoleColor.Gray;
